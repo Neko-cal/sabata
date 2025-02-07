@@ -27,7 +27,6 @@ import nemo.collections.asr as nemo_asr
 import nemo.lightning as nl
 from nemo.lightning import AutoResume
 
-
 if __name__ == "__main__":
 
     if len(sys.argv) != 2:
@@ -37,8 +36,10 @@ if __name__ == "__main__":
     config_path = sys.argv[1]
     config = load_config(config_path)
 
-    # Load QuartzNet15x5 model
-    model = nemo_asr.models.EncDecCTCModel.from_pretrained(model_name=config.model.name)
+    print(f"Fine tuning {config.model.name}...\nDownloading the checkpoint")
+
+    # Load QuartzNet model
+    model = nemo_asr.models.EncDecCTCModel.restore_from(restore_path=config.model.name)
 
     # Ensure all audio files have only 1 channel
     check_and_convert_audio_channels(config.data_loaders.train.manifest_filepath)
@@ -51,10 +52,8 @@ if __name__ == "__main__":
              'l', 'm', 'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v',
              'w', 'x', 'y', 'z', ' ', "'", '-', 'ŋ', 'ɔ', 'ɛ', 'ɲ', 'ɓ', 'ɾ']
 
-    # Change vocabulary
-    model.change_vocabulary(
-    new_vocabulary=new_vocab
-)
+    # Do not change the vocabulary that would reset the decoder's weights
+    # model.change_vocabulary(new_vocabulary=new_vocab)
 
     # Freeze encoder if specified
     if config.training.freeze_encoder:
@@ -69,16 +68,22 @@ if __name__ == "__main__":
     model.setup_optimization(optim_config=config.optim)
 
     # Update the labels of the dataloaders
-    # Update the labels of the dataloaders
     config.data_loaders.train.labels = new_vocab
     config.data_loaders.test.labels = new_vocab
     config.data_loaders.valid.labels = new_vocab
-
 
     # Setup training, validation, and test data
     model.setup_training_data(train_data_config=config.data_loaders.train)
     model.setup_validation_data(val_data_config=config.data_loaders.valid)
     model.setup_test_data(test_data_config=config.data_loaders.test)
+
+    # Increase SpectAugment for larger models to prevent overfitting
+    model.cfg.spec_augment.rect_freq = 50
+    model.cfg.spec_augment.rect_time = 120
+    model.cfg.spec_augment.rect_masks = 10 # Increased
+
+    print(model.cfg.spec_augment)
+    model.spec_augmentation = model.from_config_dict(model.cfg.spec_augment)
 
     # Setup logger and callbacks
     wandb_logger = WandbLogger(
@@ -118,7 +123,7 @@ if __name__ == "__main__":
     # Auto resume policy
     resume = AutoResume(
         resume_if_exists=config.training.resume_if_exists,
-        resume_from_directory=config.training.checkpoint_dir,
+	resume_from_directory=config.training.checkpoint_dir,
         resume_ignore_no_checkpoint=config.training.resume_ignore_no_checkpoint
     )
     resume.setup(trainer)

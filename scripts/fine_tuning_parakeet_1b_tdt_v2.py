@@ -31,30 +31,34 @@ from nemo.lightning import AutoResume
 if __name__ == "__main__":
 
     if len(sys.argv) != 2:
-        raise ValueError("Usage: python fine_tuning_quartznet_20M_ctc.py <config_path>")
+        raise ValueError("Usage: python fine_tuning_parakeet_1B_tdt.py <config_path>")
 
     # Load YAML configuration
     config_path = sys.argv[1]
     config = load_config(config_path)
 
-    # Load QuartzNet15x5 model
-    model = nemo_asr.models.EncDecCTCModel.from_pretrained(model_name=config.model.name)
+    print(f"Fine tuning {config.model.name}...\nDownloading the checkpoint")
+
+    # Load Parakeet-110M-tdt-ctc model
+    model = nemo_asr.models.ASRModel.restore_from(restore_path=config.model.name)
+
+    # pretrained_decoder = None
+
+    # if config.training.warm_decoder:
+        # Preserve the decoder parameters in case weight matching can be done later to restore them later
+        # For the restauration to be possible, the new vocab size of the model should be equal to the vocab size of the pretraining dataset
+      #  pretrained_decoder = model.decoder.state_dict()
 
     # Ensure all audio files have only 1 channel
     check_and_convert_audio_channels(config.data_loaders.train.manifest_filepath)
     check_and_convert_audio_channels(config.data_loaders.valid.manifest_filepath)
     check_and_convert_audio_channels(config.data_loaders.test.manifest_filepath)
 
-    # The new vocabulary for the model (These are the characters its gonna output now)
-    new_vocab = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9',
-             'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k',
-             'l', 'm', 'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v',
-             'w', 'x', 'y', 'z', ' ', "'", '-', 'ŋ', 'ɔ', 'ɛ', 'ɲ', 'ɓ', 'ɾ']
-
     # Change vocabulary
-    model.change_vocabulary(
-    new_vocabulary=new_vocab
-)
+    # model.change_vocabulary(
+     #   new_tokenizer_dir=config.tokenizer.path,
+     #   new_tokenizer_type=config.tokenizer.type
+    # )
 
     # Freeze encoder if specified
     if config.training.freeze_encoder:
@@ -65,20 +69,32 @@ if __name__ == "__main__":
         model.encoder.unfreeze()
         print("Model encoder has been unfrozen")
 
+    # if pretrained_decoder is not None:
+        # Restore preserved model weights if shapes match
+      #  if model.decoder.prediction.dec_rnn.lstm.weight_hh_l0.shape == pretrained_decoder['prediction.dec_rnn.lstm.weight_hh_l0'].shape:
+       #     model.decoder.load_state_dict(pretrained_decoder)
+
+        #    if not model.decoder.training:
+                # Ensure the decoder is still in training mode
+         #       model.decoder.train()
+          #  print("Decoder shapes matched - restored weights from pre-trained model")
+
     # Setup optimization
     model.setup_optimization(optim_config=config.optim)
-
-    # Update the labels of the dataloaders
-    # Update the labels of the dataloaders
-    config.data_loaders.train.labels = new_vocab
-    config.data_loaders.test.labels = new_vocab
-    config.data_loaders.valid.labels = new_vocab
-
 
     # Setup training, validation, and test data
     model.setup_training_data(train_data_config=config.data_loaders.train)
     model.setup_validation_data(val_data_config=config.data_loaders.valid)
     model.setup_test_data(test_data_config=config.data_loaders.test)
+
+    # Increase SpectAugment for larger models to prevent overfitting
+    model.cfg.spec_augment.freq_masks = 4 # Increase the number of freq maks
+    model.cfg.spec_augment.freq_width = 27
+    model.cfg.spec_augment.time_masks = 15 # Increase the number of time masks
+    model.cfg.spec_augment.time_width = 0.1 # Increase
+
+    print(model.cfg.spec_augment)
+    model.spec_augmentation = model.from_config_dict(model.cfg.spec_augment)
 
     # Setup logger and callbacks
     wandb_logger = WandbLogger(
@@ -118,7 +134,7 @@ if __name__ == "__main__":
     # Auto resume policy
     resume = AutoResume(
         resume_if_exists=config.training.resume_if_exists,
-        resume_from_directory=config.training.checkpoint_dir,
+	resume_from_directory=config.training.checkpoint_dir,
         resume_ignore_no_checkpoint=config.training.resume_ignore_no_checkpoint
     )
     resume.setup(trainer)

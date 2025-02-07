@@ -48,9 +48,9 @@ if __name__ == "__main__":
         pretrained_decoder = model.decoder.state_dict()
 
     # Ensure all audio files have only 1 channel
-    check_and_convert_audio_channels(config.data_loaders.train.manifest_path)
-    check_and_convert_audio_channels(config.data_loaders.valid.manifest_path)
-    check_and_convert_audio_channels(config.data_loaders.test.manifest_path)
+    check_and_convert_audio_channels(config.data_loaders.train.manifest_filepath)
+    check_and_convert_audio_channels(config.data_loaders.valid.manifest_filepath)
+    check_and_convert_audio_channels(config.data_loaders.test.manifest_filepath)
 
     # Change vocabulary
     model.change_vocabulary(
@@ -84,6 +84,15 @@ if __name__ == "__main__":
     model.setup_training_data(train_data_config=config.data_loaders.train)
     model.setup_validation_data(val_data_config=config.data_loaders.valid)
     model.setup_test_data(test_data_config=config.data_loaders.test)
+
+    # Increase SpectAugment for larger models to prevent overfitting
+    model.cfg.spec_augment.freq_masks = 4 # Increase the number of frequency masks
+    model.cfg.spec_augment.freq_width = 27
+    model.cfg.spec_augment.time_masks = 15 # Increase the number of time masks
+    model.cfg.spec_augment.time_width = 0.05
+    
+    print(model.cfg.spec_augment)
+    model.spec_augmentation = model.from_config_dict(model.cfg.spec_augment)
 
     # Setup logger and callbacks
     wandb_logger = WandbLogger(
@@ -123,6 +132,7 @@ if __name__ == "__main__":
     # Auto resume policy
     resume = AutoResume(
         resume_if_exists=config.training.resume_if_exists,
+        resume_from_directory=config.training.checkpoint_dir,
         resume_ignore_no_checkpoint=config.training.resume_ignore_no_checkpoint
     )
     resume.setup(trainer)
@@ -130,7 +140,7 @@ if __name__ == "__main__":
     # Start training
     try:
         trainer.fit(model)
-    except KeyboardInterrupt:
+    except Exception:
         print("Training interrupted, finishing logging...")
         wandb.finish()
 
