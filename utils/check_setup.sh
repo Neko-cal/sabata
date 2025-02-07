@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 
 ### Copyright 2025 RobotsMali AI4D Lab.
 
@@ -50,20 +50,32 @@ check_tokenizer() {
 
 # Function to check if dependencies are installed
 check_dependencies() {
-  dependencies=("pip" "ffmpeg" "libsndfile1" "python3" "pydub" "nemo_toolkit" "megatron-core" "wandb")
+  system_dependencies=("pip" "ffmpeg" "libsndfile1" "python3")
+  python_packages=("pydub" "nemo" "megatron" "wandb")
+
   missing_deps=()
 
-  for dep in "${dependencies[@]}"; do
+  # Check system dependencies
+  for dep in "${system_dependencies[@]}"; do
     if ! command -v "$dep" &>/dev/null && ! dpkg -l | grep -q "$dep"; then
-      missing_deps+=("$dep")
+      missing_deps+=("$dep (system)")
     fi
   done
 
+  # Check Python dependencies
+  for pkg in "${python_packages[@]}"; do
+    if ! python3 -c "import $pkg" &>/dev/null; then
+      missing_deps+=("$pkg (Python)")
+    fi
+  done
+
+  # Report results
   if [ ${#missing_deps[@]} -eq 0 ]; then
     echo "✔ All dependencies are installed."
     return 0
   else
-    echo "❌ ERROR: The following dependencies are missing: ${missing_deps[*]}"
+    echo "❌ ERROR: The following dependencies are missing:"
+    printf "%s\n" "${missing_deps[@]}"
     echo "Run the installation script to resolve this issue."
     return 1
   fi

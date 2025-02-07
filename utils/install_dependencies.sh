@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 
 ### Copyright 2025 RobotsMali AI4D Lab.
 
@@ -16,8 +16,9 @@
 # This script installs the dependencies for the fine-tuning scripts in this repository.
 # If you want to install them in a specific environment, ensure you are in the right environment before running this script.
 
-# First of all, upgrade pip
-pip install --upgrade pip
+# First of all, install pip
+
+sudo apt install python3-pip
 
 # OS packages (Assuming you are using Ubuntu)
 if ! apt-get install -y libsndfile1 ffmpeg; then
