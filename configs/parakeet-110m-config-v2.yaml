@@ -1,8 +1,8 @@
 model:
-  name: "nvidia/parakeet-tdt_ctc-110m" # Ensure this is a valid model name for BaseClass.from_pretrained method
+  name: "./models/soloni-110M-tdt-ctc-v1.nemo" # Ensure this is a valid model name for BaseClass.from_pretrained method
 
 tokenizer:
-  path: "???" # Specify the path to the tokenizer
+  path: "bam-tokenizer/tokenizer_spe_bpe_v1024" # Specify the path to the tokenizer
   type: "bpe" # Specify the tokenizer type
 
 data_loaders:
@@ -37,16 +37,16 @@ data_loaders:
 
 optim:
   name: "adamw"
-  lr: 1e-4
+  lr: 1e-3
   betas: [0.9, 0.98]
   weight_decay: 1e-3
   sched:
     name: "NoamAnnealing"
     d_model: 512
     warmup_steps: null
-    max_steps: 11625 # Ensure this is the same as the number of training steps
-    warmup_ratio: 0.1
-    min_lr: 1e-7
+    max_steps: 17437 # Ensure this is the same as the number of training steps
+    warmup_ratio: 0.08
+    min_lr: 1e-8
 
 wandb:
   project: "bam-asr-nemo-training"
@@ -55,11 +55,11 @@ wandb:
 training:
   freeze_encoder: False
   warm_decoder: True
-  precision: "bf16"
+  precision: "bf16-mixed"
   checkpoint_dir: "parakeet-110M-v2-checkpoints" # Remember to change this if wandb.name is changed
   save_top_k: 2
   patience: 3
-  epochs: 20
+  epochs: 30
   accumulate_grad_batches: 1
   check_val_every_n_epoch: 1
   resume_if_exists: True

@@ -1,8 +1,8 @@
 model:
-  name: "nvidia/parakeet-tdt-1.1b" # Ensure this is a valid model name for BaseClass.from_pretrained method
+  name: "models/soloba-1.1B-tdt-v1.nemo" # Ensure this is a valid model name for BaseClass.from_pretrained method
 
 tokenizer:
-  path: "???" # Specify the path to the tokenizer
+  path: "bam-tokenizer/tokenizer_spe_bpe_v1024" # Specify the path to the tokenizer
   type: "bpe" # Specify the tokenizer type
 
 data_loaders:
@@ -11,8 +11,8 @@ data_loaders:
     sample_rate: 16000
     max_duration: 30 # Maximum duration of the audio in seconds
     min_duration: 0.1 # Minimum duration of the audio in seconds
-    batch_size: 64 # Batch size for training
-    num_workers: 8
+    batch_size: 50 # Batch size for training
+    num_workers: 4
     shuffle: True
     pin_memory: True
     use_start_end_token: True
@@ -21,7 +21,7 @@ data_loaders:
     sample_rate: 16000
     max_duration: 15
     batch_size: 32
-    num_workers: 8
+    num_workers: 4
     shuffle: False
     pin_memory: True
     use_start_end_token: True
@@ -30,7 +30,7 @@ data_loaders:
     sample_rate: 16000
     max_duration: 30
     batch_size: 32
-    num_workers: 8
+    num_workers: 4
     shuffle: False
     pin_memory: True
     use_start_end_token: True
@@ -41,10 +41,9 @@ optim:
   betas: [0.9, 0.98]
   weight_decay: 1e-3
   sched:
-    name: "NoamAnnealing"
-    d_model: 1024
+    name: "WarmupAnnealing"
     warmup_steps: null
-    max_steps: 5813 # Ensure this is the same as the number of training steps
+    max_steps: 37198 # Ensure this is the same as the number of training steps
     warmup_ratio: 0.1
     min_lr: 1e-9
 
@@ -53,13 +52,13 @@ wandb:
   name: "finetune-parakeet-1.1B-v2"
 
 training:
-  freeze_encoder: False
+  freeze_encoder: True
   warm_decoder: True
-  precision: "bf16"
+  precision: "bf16-mixed"
   checkpoint_dir: "parakeet-1.1B-v2-checkpoints" # Remember to change this if wandb.name is changed
   save_top_k: 2
-  patience: 3
-  epochs: 10
+  patience: 10
+  epochs: 50
   accumulate_grad_batches: 1
   check_val_every_n_epoch: 1
   resume_if_exists: True

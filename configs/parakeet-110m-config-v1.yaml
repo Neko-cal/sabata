@@ -2,7 +2,7 @@ model:
   name: "nvidia/parakeet-tdt_ctc-110m" # Ensure this is a valid model name for BaseClass.from_pretrained method
 
 tokenizer:
-  path: "???" # Specify the path to the tokenizer
+  path: "bam-tokenizer/tokenizer_spe_bpe_v1024" # Specify the path to the tokenizer
   type: "bpe" # Specify the tokenizer type
 
 data_loaders:
@@ -55,7 +55,7 @@ wandb:
 training:
   freeze_encoder: True
   warm_decoder: True
-  precision: "bf16"
+  precision: "bf16-mixed"
   checkpoint_dir: "parakeet-110M-v1-checkpoints" # Remember to change this if wandb.name is changed
   save_top_k: 2
   patience: 3
