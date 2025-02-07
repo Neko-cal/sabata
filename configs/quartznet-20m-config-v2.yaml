@@ -44,19 +44,19 @@ optim:
     name: "CosineAnnealing"
     warmup_steps: null
     max_steps: 14530 # Ensure this is the same as the number of training steps
-    warmup_ratio: 0.05
+    warmup_ratio: 0.07
     min_lr: 1e-6
     last_epoch: -1
 
 wandb:
   project: "bam-asr-nemo-training"
-  name: "finetune-quartznet-v2"
+  name: "finetune-quartznet-v3"
 
 training:
   freeze_encoder: False
   warm_decoder: False
   precision: "bf16-mixed"
-  checkpoint_dir: "quartznet-v2-checkpoints" # Remember to change this if wandb.name is changed
+  checkpoint_dir: "quartznet-v3-checkpoints" # Remember to change this if wandb.name is changed
   save_top_k: 2
   patience: 5
   epochs: 20
@@ -64,4 +64,4 @@ training:
   check_val_every_n_epoch: 1
   resume_if_exists: True
   resume_ignore_no_checkpoint: True
-  save_model_path: "models/quartznet-bam-v2.nemo" # Remember to change this if wandb.name is changed
+  save_model_path: "models/quartznet-bam-v3.nemo" # Remember to change this if wandb.name is changed
