@@ -1,68 +1,82 @@
-model:
-  name: "models/soloni-110M-tdt-ctc-v3.nemo"
+# Configuration for fine-tuning Parakeet-TDT-1.1B on the Sabian dataset.
 
+# The pre-trained model to start from. 
+# Using a model from NVIDIA's NGC catalog on Hugging Face.
+model:
+  name: "nvidia/parakeet-tdt-1.1b"
+
+# --- Tokenizer Configuration ---
+# Path should point to the directory created by create_sabian_tokenizer.sh
 tokenizer:
-  path: "bam-tokenizer/tokenizer_spe_bpe_v1024"
+  path: "sabian-tokenizer/tokenizer_spe_bpe_v1024"
   type: "bpe"
 
+# --- Data Loader Configuration ---
+# Paths should point to the manifests created by prepare_sabian_dataset.py
 data_loaders:
   train:
-    manifest_filepath: "bam-asr-all/manifests/train-manifest.json"
+    manifest_filepath: "sabian_dataset/manifests/train_manifest.json"
     sample_rate: 16000
-    max_duration: 30
-    min_duration: 0.1
-    batch_size: 64  # smaller batch
-    num_workers: 8
+    batch_size: 16 # Adjust based on your GPU memory (16 or 32 is a good start)
     shuffle: True
+    num_workers: 8
     pin_memory: True
-    use_start_end_token: True
+    use_start_end_token: True # Required for TDT models
+    
   valid:
-    manifest_filepath: "bam-asr-all/manifests/test-manifest.json"  # Path to the validation manifest
+    manifest_filepath: "sabian_dataset/manifests/validation_manifest.json"
     sample_rate: 16000
-    max_duration: 15
-    batch_size: 32
-    num_workers: 8
+    batch_size: 16
     shuffle: False
+    num_workers: 8
     pin_memory: True
     use_start_end_token: True
+
   test:
-    manifest_filepath: "bam-asr-all/manifests/test-manifest.json" # Path to the test manifest
+    manifest_filepath: "sabian_dataset/manifests/test_manifest.json"
     sample_rate: 16000
-    max_duration: 30
-    batch_size: 32
-    num_workers: 8
+    batch_size: 16
     shuffle: False
+    num_workers: 8
     pin_memory: True
     use_start_end_token: True
 
+# --- Experiment Tracking ---
 wandb:
-  project: "bam-asr-nemo-training"
-  name: "finetune-parakeet-110M-v5"
+  project: "sabian-asr-nemo"
+  name: "finetune-parakeet-1.1b-sabian-v1"
 
+# --- Optimizer and Scheduler Configuration ---
 optim:
   name: "adamw"
-  # Slightly lower LR if unfreezing
-  lr: 5e-5
+  lr: 5e-5 # A good starting learning rate for fine-tuning
   betas: [0.9, 0.98]
   weight_decay: 1e-4
+
   sched:
     name: "WarmupAnnealing"
-    max_steps: 29061  # (epochs * steps_per_epoch)
+    # IMPORTANT: You MUST recalculate this value!
+    # Formula: max_steps = (num_training_samples / (batch_size * accumulate_grad_batches)) * num_epochs
+    # Example: (15000 samples / (16 * 2)) * 50 epochs = 23437 steps
+    max_steps: 23437 # <--- UPDATE THIS VALUE!
     warmup_ratio: 0.1
     min_lr: 1e-7
-    last_epoch: -1
 
+# --- Training Configuration ---
 training:
-  # freezing the encoder
-  freeze_encoder: False
-  warm_decoder: True
-  precision: "bf16-mixed"
-  checkpoint_dir: "parakeet-110M-v5-checkpoints"
-  save_top_k: 2
-  patience: 15  # more patience
+  # It is highly recommended to freeze the encoder for the first few epochs of fine-tuning
+  # a large model on a smaller dataset to prevent catastrophic forgetting.
+  freeze_encoder: True 
+  warm_decoder: True # Preserves decoder weights if vocab size matches (won't here, but good practice)
+  precision: "bf16-mixed" # Use "32-true" if bf16 is not supported
   epochs: 50
-  accumulate_grad_batches: 1  # effective batch size 64
+  accumulate_grad_batches: 2 # Effective batch size = 16 * 2 = 32
   check_val_every_n_epoch: 1
+  
+  # --- Checkpointing and Resuming ---
+  checkpoint_dir: "parakeet-sabian-checkpoints-v1"
+  save_top_k: 3 # Save the top 3 models based on validation WER
+  patience: 10 # Stop training if val_wer doesn't improve for 10 epochs
   resume_if_exists: True
   resume_ignore_no_checkpoint: True
-  save_model_path: "models/soloni-110M-tdt-ctc-v5.nemo"
+  save_model_path: "models/parakeet-sabian-finetuned-v1.nemo"
