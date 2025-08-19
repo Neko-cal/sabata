@@ -1,66 +1,91 @@
+"""
+This script downloads the 'mutisya/sabian' dataset from Hugging Face,
+and prepares it for NeMo ASR training. It creates:
+1. Manifest files (train, validation, test) in .json format.
+2. A single text file containing all training transcriptions for tokenizer creation.
+"""
 import os
 import json
-from datasets import load_dataset
+import librosa
+from datasets import load_dataset, Audio
 from tqdm import tqdm
-import soundfile as sf
+import warnings
 
-def create_manifest(dataset, manifest_path, split_name):
+# Suppress warnings from librosa about audioread
+warnings.filterwarnings("ignore", category=UserWarning, module='librosa')
+
+def create_manifest(dataset, manifest_path):
     """Creates a NeMo-compatible manifest file from a Hugging Face dataset split."""
-    print(f"Creating manifest for {split_name} split...")
-    with open(manifest_path, 'w', encoding='utf-8') as f:
-        for item in tqdm(dataset, desc=f"Processing {split_name}"):
-            audio_path = item['audio']['path']
-            text = item['sentence'] # IMPORTANT: Check the column name for transcripts in your dataset
-            
-            # Check if audio file exists and get duration
-            if not os.path.exists(audio_path):
-                print(f"Warning: Audio file not found at {audio_path}. Skipping.")
-                continue
-                
+    os.makedirs(os.path.dirname(manifest_path), exist_ok=True)
+    
+    with open(manifest_path, 'w', encoding='utf-8') as fout:
+        for item in tqdm(dataset, desc=f"Processing {os.path.basename(manifest_path)}"):
             try:
-                audio_info = sf.info(audio_path)
-                duration = audio_info.duration
+                # The 'audio' feature in Hugging Face datasets provides the path
+                audio_path = item['audio']['path']
+                
+                # NeMo requires absolute paths in manifests
+                abs_audio_path = os.path.abspath(audio_path)
+                
+                if not os.path.exists(abs_audio_path):
+                    print(f"Warning: Audio file not found at {abs_audio_path}. Skipping.")
+                    continue
+
+                # Get audio duration using librosa
+                duration = librosa.get_duration(path=abs_audio_path)
+                
+                # Get the transcript
+                text = item['sentence']
+
+                # Create a JSON entry for the manifest
+                entry = {
+                    'audio_filepath': abs_audio_path,
+                    'duration': duration,
+                    'text': text
+                }
+                fout.write(json.dumps(entry) + '\n')
             except Exception as e:
-                print(f"Could not read duration for {audio_path}. Error: {e}. Skipping.")
-                continue
+                print(f"Error processing item: {item}. Error: {e}")
 
-            # Ensure text is clean (e.g., remove special characters if needed)
-            # This is a good place for language-specific text normalization
-            text = text.strip()
 
-            entry = {
-                'audio_filepath': os.path.abspath(audio_path),
-                'duration': duration,
-                'text': text
-            }
-            f.write(json.dumps(entry) + '\n')
-    print(f"Manifest created at: {manifest_path}")
-
-def main():
-    # --- Configuration ---
-    dataset_name = "your-hf-username/sabian" # IMPORTANT: Replace with your actual dataset name
-    output_dir = "sabian-asr"
-    manifest_dir = os.path.join(output_dir, "manifests")
-
-    # --- Main Logic ---
-    print(f"Loading '{dataset_name}' dataset from Hugging Face...")
-    # This will download and cache the dataset. The audio is stored locally.
-    # trust_remote_code=True may be needed for some datasets.
-    dataset = load_dataset(dataset_name, trust_remote_code=True) 
-    
-    os.makedirs(manifest_dir, exist_ok=True)
-    
-    # Check for available splits and create manifests
-    # IMPORTANT: Adjust split names ('train', 'validation', 'test') to match your dataset
-    if 'train' in dataset:
-        create_manifest(dataset['train'], os.path.join(manifest_dir, 'train-manifest.json'), 'train')
-    if 'validation' in dataset:
-        create_manifest(dataset['validation'], os.path.join(manifest_dir, 'valid-manifest.json'), 'validation')
-    if 'test' in dataset:
-        create_manifest(dataset['test'], os.path.join(manifest_dir, 'test-manifest.json'), 'test')
-        
-    print("\nDataset preparation complete.")
-    print(f"Manifests are located in: {manifest_dir}")
+def prepare_text_for_tokenizer(dataset, text_path):
+    """Extracts all transcripts into a single text file for tokenizer training."""
+    os.makedirs(os.path.dirname(text_path), exist_ok=True)
+    with open(text_path, 'w', encoding='utf-8') as f:
+        for item in tqdm(dataset, desc="Writing text corpus for tokenizer"):
+            f.write(item['sentence'] + '\n')
 
 if __name__ == "__main__":
-    main()
+    # --- Configuration ---
+    dataset_name = "mutisya/sabian"
+    output_dir = "sabian_dataset"
+    sample_rate = 16000
+    
+    # --- Main Logic ---
+    print(f"Loading '{dataset_name}' dataset from Hugging Face...")
+    # This will download and cache the dataset. 
+    # We cast the audio feature to ensure it's loaded at the correct sample rate.
+    sabian_dataset = load_dataset(dataset_name)
+    sabian_dataset = sabian_dataset.cast_column("audio", Audio(sampling_rate=sample_rate))
+
+
+    # Create directories for manifests and tokenizer data
+    manifests_dir = os.path.join(output_dir, "manifests")
+    tokenizer_data_dir = os.path.join(output_dir, "tokenizer_data")
+    
+    # Create manifests for each split
+    create_manifest(sabian_dataset['train'], os.path.join(manifests_dir, 'train_manifest.json'))
+    create_manifest(sabian_dataset['validation'], os.path.join(manifests_dir, 'validation_manifest.json'))
+    create_manifest(sabian_dataset['test'], os.path.join(manifests_dir, 'test_manifest.json'))
+    
+    # Prepare a single text file from the training data to train the tokenizer
+    all_text_path = os.path.join(tokenizer_data_dir, 'all_text.txt')
+    prepare_text_for_tokenizer(sabian_dataset['train'], all_text_path)
+    
+    print("\n--- Summary ---")
+    print(f"Manifests created in: {manifests_dir}")
+    print(f"  - train_manifest.json")
+    print(f"  - validation_manifest.json")
+    print(f"  - test_manifest.json")
+    print(f"Text corpus for tokenizer created at: {all_text_path}")
+    print("\nDataset preparation complete. You can now create the tokenizer.")
