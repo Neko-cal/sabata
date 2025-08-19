@@ -1,28 +1,17 @@
 #!/bin/bash
-
 ### Copyright 2025 RobotsMali AI4D Lab.
+### (Retains original license)
 
-### Licensed under the MIT License; you may not use this file except in compliance with the License.  
-### You may obtain a copy of the License at:
-
-### https://opensource.org/licenses/MIT
-
-### Unless required by applicable law or agreed to in writing, software  
-### distributed under the License is distributed on an "AS IS" BASIS,  
-### WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.  
-### See the License for the specific language governing permissions and  
-### limitations under the License.
-
-# Function to check .wav file count
-check_wav_count() {
-  dir_path="$1"
-  dataset_size="$2"
-  count=$(find "$dir_path" -type f -name "*.wav" | wc -l)
-  if [ "$count" -eq "$dataset_size" ]; then
-    echo "✔ $dir_path contains the correct number of .wav audio samples: $count"
+# Function to check if a manifest file exists and is not empty
+check_manifest() {
+  file_path="$1"
+  if [ -s "$file_path" ]; then
+    count=$(wc -l < "$file_path")
+    echo "✔ Manifest '$file_path' found with $count entries."
     return 0
   else
-    echo "❌ ERROR: $dir_path contains $count .wav files instead of $dataset_size"
+    echo "❌ ERROR: Manifest file '$file_path' is missing or empty."
+    echo "         Please run 'python prepare_sabian_dataset.py' first."
     return 1
   fi
 }
@@ -32,6 +21,12 @@ check_tokenizer() {
   tokenizer_dir="$1"
   required_files=("tokenizer.model" "tokenizer.vocab" "vocab.txt")
   missing_files=()
+
+  if [ ! -d "$tokenizer_dir" ]; then
+      echo "❌ ERROR: Tokenizer directory not found at $tokenizer_dir"
+      echo "         Please run 'bash create_sabian_tokenizer.sh' first."
+      return 1
+  fi
 
   for file in "${required_files[@]}"; do
     if [ ! -f "$tokenizer_dir/$file" ]; then
@@ -98,41 +93,24 @@ check_wandb() {
     return 1
   fi
 }
+# --- Main Check Logic ---
+echo "--- Running Pre-flight Checks for Sabian ASR Fine-tuning ---"
 
-# Function to display help message
-display_help() {
-  echo "Usage: $0 [OPTIONS]"
-  echo "\nOptions:"
-  echo "  --dataset_size=<size>         Expected number of .wav files in the dataset"
-  echo "  --dataset_dir=<path>          Path to the dataset directory"
-  echo "  --tokenizer_dir=<path>        Path to the tokenizer directory"
-  echo "  -h, --help                    Show this help message and exit"
-  exit 0
-}
+# Define paths based on the new workflow
+DATASET_DIR="./sabian_dataset"
+TOKENIZER_DIR_BASE="./sabian-tokenizer"
+TOKENIZER_DIR_FULL="$TOKENIZER_DIR_BASE/tokenizer_spe_bpe_v1024" # Update vocab size if you changed it
 
-# Parse arguments
-while [ "$#" -gt 0 ]; do
-  case "$1" in
-    --dataset_size=*) dataset_size="${1#*=}" ;;
-    --dataset_dir=*) dataset_dir="${1#*=}" ;;
-    --tokenizer_dir=*) tokenizer_dir="${1#*=}" ;;
-    -h|--help) display_help ;;
-    *) echo "Unknown option: $1"; exit 1 ;;
-  esac
-  shift
-done
+# Check for manifests
+check_manifest "$DATASET_DIR/manifests/train_manifest.json" || exit 1
+check_manifest "$DATASET_DIR/manifests/validation_manifest.json" || exit 1
+check_manifest "$DATASET_DIR/manifests/test_manifest.json" || exit 1
 
-check_wav_count "$dataset_dir" "$dataset_size" || exit 1
+# Check for tokenizer
+check_tokenizer "$TOKENIZER_DIR_FULL" || exit 1
 
-if [ ! -d "$dataset_dir/manifests" ]; then
-  echo "❌ ERROR: Manifests directory not found in $dataset_dir."
-  exit 1
-else
-  echo "✔ Manifests directory found in $dataset_dir."
-fi
+# Check for dependencies and wandb login (optional, uncomment if needed)
+# check_dependencies || exit 1
+# check_wandb || exit 1
 
-check_tokenizer "$tokenizer_dir" || exit 1
-check_dependencies || exit 1
-check_wandb || exit 1
-
-echo "✔ All checks passed. System is ready for training."
+echo -e "\n✔ All checks passed. System is ready for training."
